@@ -25,7 +25,8 @@ $VulnerableApps = @(
     [PSCustomObject]@{Name = "Microsoft.MSPaint";  FixedVersion = [System.Version]"6.2105.4017.0"; Deprovision ="false"},
     [PSCustomObject]@{Name = "Microsoft.MicrosoftOfficeHub";  FixedVersion = [System.Version]"9999.99.99.99"; Deprovision ="true"},   #Remove all versions and deporvision the app as it's not needed on endpoints
     [PSCustomObject]@{Name = "Microsoft.WindowsMaps";  FixedVersion = [System.Version]"9999.99.99.99"; Deprovision ="true"},   #Remove all versions and deporvision the app as it's not needed on endpoints
-    [PSCustomObject]@{Name = "Microsoft.Print3D";  FixedVersion = [System.Version]"9999.99.99.99"; Deprovision ="true"} #According to Nessus scans, the latest version (3.3.791.0) is vulnerable hence setting the fixed version to 8 so the app is removed in all cases 
+    [PSCustomObject]@{Name = "Microsoft.Print3D";  FixedVersion = [System.Version]"9999.99.99.99"; Deprovision ="true"}, #According to Nessus scans, the latest version (3.3.791.0) is vulnerable hence setting the fixed version to 8 so the app is removed in all cases 
+    [PSCustomObject]@{Name = "Microsoft.WindowsTerminal";  FixedVersion = [System.Version]"1.15.2874"; Deprovision ="false"}
 )
 
 # This is an array to store the vulnerable apps found on the device
