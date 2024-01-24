@@ -139,11 +139,13 @@ Start-Transcript -Path c:\Windows\logs\RemediatingAppxApps_$($env:COMPUTERNAME)_
 
 $VulnerableApps = @(
     [PSCustomObject]@{Name = "Microsoft.WebMediaExtensions";  FixedVersion = [System.Version]"1.0.40831.0"; Deprovision ="false"}, 
-    [PSCustomObject]@{Name = "Microsoft.VP9VideoExtensions";  FixedVersion = [System.Version]"1.0.41182.0"; Deprovision ="false"},     
-    [PSCustomObject]@{Name = "Microsoft.Microsoft3DViewer"; FixedVersion = [System.Version]"7.2307.27042.0"; Deprovision ="true"},
-    [PSCustomObject]@{Name = "Microsoft.MSPaint";  FixedVersion = [System.Version]"6.2105.4017.0"; Deprovision ="false"},
-    [PSCustomObject]@{Name = "Microsoft.MicrosoftOfficeHub";  FixedVersion = [System.Version]"9999.99.99.99"; Deprovision ="true"},   #Remove all versions and deporvision the app as it's not needed on endpoints
-    [PSCustomObject]@{Name = "Microsoft.WindowsMaps";  FixedVersion = [System.Version]"9999.99.99.99"; Deprovision ="true"},   #Remove all versions and deporvision the app as it's not needed on endpoints
+    [PSCustomObject]@{Name = "Microsoft.VP9VideoExtensions";  FixedVersion = [System.Version]"1.0.42791.0"; Deprovision ="false"},     
+    [PSCustomObject]@{Name = "Microsoft.Microsoft3DViewer"; FixedVersion = [System.Version]"7.2307.27042.0"; Deprovision ="false"},
+    [PSCustomObject]@{Name = "Microsoft.HEIFImageExtension"; FixedVersion = [System.Version]"1.0.43012.0"; Deprovision ="false"},
+    [PSCustomObject]@{Name = "Microsoft.HEVCVideoExtension"; FixedVersion = [System.Version]"2.1.61661.0"; Deprovision ="false"},
+    [PSCustomObject]@{Name = "Microsoft.MSPaint";  FixedVersion = [System.Version]"6.2305.16087.0"; Deprovision ="false"},
+    [PSCustomObject]@{Name = "Microsoft.MicrosoftOfficeHub";  FixedVersion = [System.Version]"9999.99.99.99"; Deprovision ="true"},   #Remove all versions and deprovision the app as it's not needed on endpoints
+    [PSCustomObject]@{Name = "Microsoft.WindowsMaps";  FixedVersion = [System.Version]"9999.99.99.99"; Deprovision ="true"},   #Remove all versions and deprovision the app as it's not needed on endpoints
     [PSCustomObject]@{Name = "Microsoft.Print3D";  FixedVersion = [System.Version]"9999.99.99.99"; Deprovision ="true"}, #According to Nessus scans, the latest version (3.3.791.0) is vulnerable hence setting the fixed version to 8 so the app is removed in all cases 
     [PSCustomObject]@{Name = "Microsoft.WindowsTerminal";  FixedVersion = [System.Version]"1.15.2874"; Deprovision ="false"}
 )
