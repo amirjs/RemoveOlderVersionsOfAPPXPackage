@@ -138,9 +138,11 @@ Start-Transcript -Path c:\Windows\logs\RemediatingAppxApps_$($env:COMPUTERNAME)_
 
 
 $VulnerableApps = @(
+    [PSCustomObject]@{Name = "Microsoft.HEVCVideoExtension";  FixedVersion = [System.Version]"2.0.61931.0"; Deprovision ="false"}, 
+    [PSCustomObject]@{Name = "Microsoft.WindowsTerminal";  FixedVersion = [System.Version]"1.15.2874.0"; Deprovision ="false"}, 
     [PSCustomObject]@{Name = "Microsoft.WebMediaExtensions";  FixedVersion = [System.Version]"1.0.40831.0"; Deprovision ="false"}, 
-    [PSCustomObject]@{Name = "Microsoft.VP9VideoExtensions";  FixedVersion = [System.Version]"1.0.41182.0"; Deprovision ="false"},     
-    [PSCustomObject]@{Name = "Microsoft.Microsoft3DViewer"; FixedVersion = [System.Version]"7.2307.27042.0"; Deprovision ="true"},
+    [PSCustomObject]@{Name = "Microsoft.VP9VideoExtensions";  FixedVersion = [System.Version]"1.0.61591.0"; Deprovision ="false"},     
+    [PSCustomObject]@{Name = "Microsoft.Microsoft3DViewer"; FixedVersion = [System.Version]"7.2307.27042.0"; Deprovision ="false"},
     [PSCustomObject]@{Name = "Microsoft.MSPaint";  FixedVersion = [System.Version]"6.2105.4017.0"; Deprovision ="false"},
     [PSCustomObject]@{Name = "Microsoft.MicrosoftOfficeHub";  FixedVersion = [System.Version]"9999.99.99.99"; Deprovision ="true"},   #Remove all versions and deporvision the app as it's not needed on endpoints
     [PSCustomObject]@{Name = "Microsoft.WindowsMaps";  FixedVersion = [System.Version]"9999.99.99.99"; Deprovision ="true"},   #Remove all versions and deporvision the app as it's not needed on endpoints
