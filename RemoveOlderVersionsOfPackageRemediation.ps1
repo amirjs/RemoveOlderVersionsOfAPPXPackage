@@ -148,7 +148,9 @@ $VulnerableApps = @(
     [PSCustomObject]@{Name = "Microsoft.Print3D";  FixedVersion = [System.Version]"9999.99.99.99"; Deprovision ="true"}, #According to Nessus scans, the latest version (3.3.791.0) is vulnerable hence setting the fixed version to 8 so the app is removed in all cases 
     [PSCustomObject]@{Name = "Microsoft.WindowsTerminal";  FixedVersion = [System.Version]"1.15.2874"; Deprovision ="false"},
     [PSCustomObject]@{Name = "Microsoft.RawImageExtension";  FixedVersion = [System.Version]"2.1.32791.0"; Deprovision ="false"},
-    [PSCustomObject]@{Name = "MicrosoftTeams";  FixedVersion = [System.Version]"99999.9999.9999.9999"; Deprovision ="true"} # Removes Teams Personal
+    [PSCustomObject]@{Name = "MicrosoftTeams";  FixedVersion = [System.Version]"99999.9999.9999.9999"; Deprovision ="true"}, # Removes Teams Personal
+    [PSCustomObject]@{Name = "Microsoft.MSPaint";  FixedVersion = [System.Version]"6.2305.16087.0"; Deprovision ="false"},
+    [PSCustomObject]@{Name = "MSTeams";  FixedVersion = [System.Version]"25122.1415.3698.6812"; Deprovision ="false"}
 )
 
 foreach ($App in $VulnerableApps) {
