@@ -28,8 +28,11 @@ $VulnerableApps = @(
     [PSCustomObject]@{Name = "Microsoft.WindowsMaps";  FixedVersion = [System.Version]"9999.99.99.99"; Deprovision ="true"},   #Remove all versions and deprovision the app as it's not needed on endpoints
     [PSCustomObject]@{Name = "Microsoft.Print3D";  FixedVersion = [System.Version]"9999.99.99.99"; Deprovision ="true"}, #According to Nessus scans, the latest version (3.3.791.0) is vulnerable hence setting the fixed version to 8 so the app is removed in all cases 
     [PSCustomObject]@{Name = "Microsoft.WindowsTerminal";  FixedVersion = [System.Version]"1.15.2874"; Deprovision ="false"},
-    [PSCustomObject]@{Name = "Microsoft.RawImageExtension";  FixedVersion = [System.Version]"2.1.32791.0"; Deprovision ="false"},
-    [PSCustomObject]@{Name = "MicrosoftTeams";  FixedVersion = [System.Version]"99999.9999.9999.9999"; Deprovision ="true"} # Removes Teams Personal        
+    [PSCustomObject]@{Name = "Microsoft.RawImageExtension";  FixedVersion = [System.Version]"2.1.61661.0"; Deprovision ="false"},
+    [PSCustomObject]@{Name = "MicrosoftTeams";  FixedVersion = [System.Version]"99999.9999.9999.9999"; Deprovision ="true"}, # Removes Teams Personal        
+    [PSCustomObject]@{Name = "Microsoft.WindowsNotepad";  FixedVersion = [System.Version]"11.2510.14.0"; Deprovision ="false"} # Notepad 
+
+    
 )
 
 # This is an array to store the vulnerable apps found on the device

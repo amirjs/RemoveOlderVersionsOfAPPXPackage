@@ -147,8 +147,10 @@ $VulnerableApps = @(
     [PSCustomObject]@{Name = "Microsoft.WindowsMaps";  FixedVersion = [System.Version]"9999.99.99.99"; Deprovision ="true"},   #Remove all versions and deprovision the app as it's not needed on endpoints
     [PSCustomObject]@{Name = "Microsoft.Print3D";  FixedVersion = [System.Version]"9999.99.99.99"; Deprovision ="true"}, #According to Nessus scans, the latest version (3.3.791.0) is vulnerable hence setting the fixed version to 8 so the app is removed in all cases 
     [PSCustomObject]@{Name = "Microsoft.WindowsTerminal";  FixedVersion = [System.Version]"1.15.2874"; Deprovision ="false"},
-    [PSCustomObject]@{Name = "Microsoft.RawImageExtension";  FixedVersion = [System.Version]"2.1.32791.0"; Deprovision ="false"},
-    [PSCustomObject]@{Name = "MicrosoftTeams";  FixedVersion = [System.Version]"99999.9999.9999.9999"; Deprovision ="true"} # Removes Teams Personal    
+    [PSCustomObject]@{Name = "Microsoft.RawImageExtension";  FixedVersion = [System.Version]"2.1.61661.0"; Deprovision ="false"},
+    [PSCustomObject]@{Name = "MicrosoftTeams";  FixedVersion = [System.Version]"99999.9999.9999.9999"; Deprovision ="true"}, # Removes Teams Personal    
+    [PSCustomObject]@{Name = "Microsoft.WindowsNotepad";  FixedVersion = [System.Version]"11.2510.14.0"; Deprovision ="false"} # Notepad 
+    
     
 )
 
@@ -201,6 +203,8 @@ foreach ($App in $VulnerableApps) {
                     Write-Output "Deprovioning is set to True. Trying to deporvison the app $($($Appx.packagefullname)) for all users"
                     #Remove-AppxProvisionedPackage -displayname $($App.PackageFullName) -AllUsers -Online -Verbose                         
                     Get-AppxProvisionedPackage -Online | Where-Object {$_.displayname -eq $($App.Name) }  | Remove-AppxProvisionedPackage -Online -AllUsers -Verbose
+                    # trigger this to clean up orphaned provisioned packages 	c:\windows\system32\rundll32.exe AppxDeploymentClient.dll,AppxCleanupOrphanPackages
+                    Start-Process -FilePath "c:\windows\system32\rundll32.exe" -ArgumentList "AppxDeploymentClient.dll,AppxCleanupOrphanPackages" -Wait -NoNewWindow -ErrorAction SilentlyContinue 
                 }
                 catch {
                     #The app wasn't removed. 
