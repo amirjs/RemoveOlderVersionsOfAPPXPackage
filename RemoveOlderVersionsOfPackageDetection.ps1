@@ -30,7 +30,7 @@ $VulnerableApps = @(
     [PSCustomObject]@{Name = "Microsoft.WindowsTerminal";  FixedVersion = [System.Version]"1.15.2874"; Deprovision ="false"},
     [PSCustomObject]@{Name = "Microsoft.RawImageExtension";  FixedVersion = [System.Version]"2.1.61661.0"; Deprovision ="false"},
     [PSCustomObject]@{Name = "MicrosoftTeams";  FixedVersion = [System.Version]"99999.9999.9999.9999"; Deprovision ="true"}, # Removes Teams Personal        
-    [PSCustomObject]@{Name = "Microsoft.WindowsNotepad";  FixedVersion = [System.Version]"11.2510.14.0"; Deprovision ="false"} # Notepad 
+    [PSCustomObject]@{Name = "Microsoft.WindowsNotepad";  FixedVersion = [System.Version]"11.2510.14.0"; Deprovision ="true"} # Notepad 
 
     
 )

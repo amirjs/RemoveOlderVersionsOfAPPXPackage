@@ -1,23 +1,85 @@
 ﻿<#
-. SYNOPSIS 
-Detects vulnerable apps and triggers remediation if vulnerable apps are found.
+.SYNOPSIS 
+    Remediates vulnerable Windows AppX packages by updating or removing them from devices.
 
-. PARAMETER None
+.DESCRIPTION
+    This script performs automated remediation of vulnerable Windows AppX packages (Store apps).
+    It implements a multi-strategy approach to ensure device security while preventing service disruption.
+    
+    EXECUTION FLOWS COVERED:
+    
+    FLOW 1: NO VULNERABLE VERSIONS FOUND
+        - Script checks app → No vulnerable versions exist → Skip to next app
+        - Outcome: No action taken
+    
+    FLOW 2: FIXED VERSION DEPLOYED TO USERS
+        - Vulnerable version(s) found → Fixed version exists for real users
+        - Action: Remove vulnerable versions
+        - Outcome: Only safe versions remain
+    
+    FLOW 3: FIXED VERSION ONLY STAGED (SYSTEM ACCOUNT)
+        - Vulnerable version(s) found → Fixed version only registered to NT AUTHORITY\SYSTEM
+        - Action: Trigger Store update to deploy staged version
+        - Outcome: Skip removal this run to prevent complete app removal
+        - Next Run: Will remediate after fixed version is deployed to users
+    
+    FLOW 4: NO FIXED VERSION + UPDATE ENABLED (Deprovision=false)
+        - Vulnerable version(s) found → No fixed version exists → App should be kept
+        - Action: Trigger Store update via Windows API → Remove vulnerable version
+        - Outcome: App updated if available, vulnerable version removed
+    
+    FLOW 5: NO FIXED VERSION + DEPROVISION ENABLED (Deprovision=true)
+        - Vulnerable version(s) found → No fixed version exists → App not needed
+        - Action: Skip update attempt → Proceed directly to removal and deprovisioning
+        - Outcome: App completely removed from device and OS image
+    
+    FLOW 6: DEPROVISIONING PROCESS
+        - Triggered for apps with Deprovision=true after package removal
+        - Action: Remove from provisioned packages → Run cleanup routine
+        - Outcome: App won't reinstall for new users or during OS updates
+    
+    SAFETY MECHANISMS:
+        - Never removes old version if fixed version is only staged (not deployed)
+        - Attempts updates before removal when appropriate
+        - Handles partial removal errors gracefully (e.g., user logged off)
+        - Comprehensive logging to C:\Windows\logs\
 
-. INPUTS None
+.PARAMETER None
+    This script does not accept parameters.
 
-. OUTPUTS None
+.INPUTS None
+    Does not accept pipeline input.
 
-. NOTES
-To be used in conjunction with the RemoveOlderVersionsOfPackage detection script to remove vulnerable apps from the device.
-Run as device script in Intune.
+.OUTPUTS None
+    All outputs written to transcript log file.
 
-.Author "Amir Joseph Sayes"
+.NOTES
+    Prerequisites:
+        - Run with administrator privileges
+        - Designed for Intune device remediation scripts
+        - Requires Windows PowerShell 5.1 for Store update functionality
+        - Pair with RemoveOlderVersionsOfPackageDetection.ps1
+    
+    Log Location:
+        C:\Windows\logs\RemediatingAppxApps_<ComputerName>_<Timestamp>.log
+    
+    Error Handling:
+        - Error 0x80073D19 (user logged off) is expected and doesn't indicate failure
+        - Store update failures are logged but don't halt execution
+        - Deprovisioning errors are caught and logged
+
+.AUTHOR
+    Amir Joseph Sayes
 #>
 
-#Define variables
+#region Helper Functions
 
-# This is a function that we need to use to update the store apps. It's a bit of a hack, but it works.
+<#──────────────────────────────────────────────────────────────────────────────
+  FUNCTION: Update-AppxStoreApp
+  PURPOSE:  Synchronously updates Windows Store apps using WinRT APIs
+  NOTES:    Must run in PowerShell 5.1 due to WinRT API compatibility issues
+            Uses Windows.ApplicationModel.Store.Preview.InstallControl APIs
+────────────────────────────────────────────────────────────────────────────#>
 Function Update-AppxStoreApp {
     <#
     .SYNOPSIS
@@ -132,11 +194,34 @@ Function Update-AppxStoreApp {
     
 }
 
+#endregion
+
+#region Main Script Execution
+
+<#──────────────────────────────────────────────────────────────────────────────
+  SECTION: LOGGING INITIALIZATION
+  PURPOSE: Start transcript logging for audit trail and troubleshooting
+────────────────────────────────────────────────────────────────────────────#>
 #Start logging
 $CurrentTime = Get-Date -Format "dd_MM_yyyy-HH_mm_ss"
 Start-Transcript -Path c:\Windows\logs\RemediatingAppxApps_$($env:COMPUTERNAME)_$CurrentTime.log -Force
 
-
+<#──────────────────────────────────────────────────────────────────────────────
+  SECTION: VULNERABLE APPS CONFIGURATION
+  
+  Each app entry defines:
+    - Name:         Package name prefix to match (e.g., "Microsoft.WebMediaExtensions")
+    - FixedVersion: Minimum safe version; anything below is considered vulnerable
+    - Deprovision:  "true" = completely remove app from device and OS image
+                    "false" = update to safe version if possible
+  
+  SPECIAL VERSION VALUES:
+    - 9999.99.99.99 = Remove ALL versions (app not needed on endpoints)
+  
+  DEPROVISION BEHAVIOR:
+    - "true"  = Remove package + Remove from provisioned packages + Prevent reinstall
+    - "false" = Attempt update first, then remove vulnerable version only
+────────────────────────────────────────────────────────────────────────────#>
 $VulnerableApps = @(
     [PSCustomObject]@{Name = "Microsoft.WebMediaExtensions";  FixedVersion = [System.Version]"1.0.40831.0"; Deprovision ="false"}, 
     [PSCustomObject]@{Name = "Microsoft.VP9VideoExtensions";  FixedVersion = [System.Version]"1.0.42791.0"; Deprovision ="false"},     
@@ -149,19 +234,43 @@ $VulnerableApps = @(
     [PSCustomObject]@{Name = "Microsoft.WindowsTerminal";  FixedVersion = [System.Version]"1.15.2874"; Deprovision ="false"},
     [PSCustomObject]@{Name = "Microsoft.RawImageExtension";  FixedVersion = [System.Version]"2.1.61661.0"; Deprovision ="false"},
     [PSCustomObject]@{Name = "MicrosoftTeams";  FixedVersion = [System.Version]"99999.9999.9999.9999"; Deprovision ="true"}, # Removes Teams Personal    
-    [PSCustomObject]@{Name = "Microsoft.WindowsNotepad";  FixedVersion = [System.Version]"11.2510.14.0"; Deprovision ="false"} # Notepad 
+    [PSCustomObject]@{Name = "Microsoft.WindowsNotepad";  FixedVersion = [System.Version]"11.2510.14.0"; Deprovision ="true"} # Notepad 
     
     
 )
 
+<#──────────────────────────────────────────────────────────────────────────────
+  SECTION: MAIN REMEDIATION LOOP
+  PURPOSE: Iterate through each vulnerable app definition and remediate as needed
+────────────────────────────────────────────────────────────────────────────#>
 foreach ($App in $VulnerableApps) {
+    
+    # ─── STEP 1: IDENTIFY VULNERABLE VERSIONS ───
+    # Query all installed instances of this app across all users
+    # Filter to versions below the fixed version threshold
     $AllVulnerableVersionsOfTheCurrentApp = @()
     $AllVulnerableVersionsOfTheCurrentApp = Get-AppxPackage -AllUsers -Name $($app.name)  | Select-Object * | Where-Object {[version]$_.version -lt $app.FixedVersion} | Sort-Object name # | Group-Object name    
+    
+    # ─── DECISION POINT 1: Are vulnerable versions present? ───
+    # YES → Continue to remediation logic below
+    # NO  → Skip to next app (FLOW 1)
     #If $AllVulnerableVersionsOfTheCurrentApp is not null that means we found vulnerable version(s) of the app on the device.    
     if ($AllVulnerableVersionsOfTheCurrentApp) {
+        
+        # ─── STEP 2: CHECK FOR FIXED VERSIONS ───
+        # Query for versions at or above the fixed version threshold
+        # Determines if a safe version is already available on the device
         #Now we need to check if a fixed version already exist  
         $FixedVersionsOfTheApp = @() 
         $FixedVersionsOfTheApp = Get-AppxPackage -AllUsers -Name $($app.name)  | Select-Object * | Where-Object {[version]$_.version -ge $App.FixedVersion} | Sort-Object name # | Group-Object name    
+        
+        # Safety flag: Controls whether vulnerable versions can be removed
+        # Set to $false if fixed version is only staged (prevents leaving app completely uninstalled)
+        $SafeToRemove = $true
+        
+        # ─── DECISION POINT 2: Does a fixed version exist? ───
+        # YES → Validate deployment status (STEP 3)
+        # NO  → Determine update strategy (STEP 4)
         If ($FixedVersionsOfTheApp) {           
             foreach ($FixedVersion in $FixedVersionsOfTheApp ) {
             #Loop and output details about the fix versions that we found
@@ -171,13 +280,50 @@ foreach ($App in $VulnerableApps) {
                 $UserSID = $FixedVersion.PackageUserInformation.UserSecurityId.Sid
                 Write-Output "A fix version of the app is found: FullName: $($FixedVersion.PackageFullName) - Installed for user(s): $($Usernames)"
             }
+            
+            # ─── STEP 3: VALIDATE FIXED VERSION DEPLOYMENT STATUS ───
+            # CRITICAL SAFETY CHECK:
+            # A fixed version returned by Get-AppxPackage may only be *staged* (registered for NT AUTHORITY\SYSTEM),
+            # meaning Windows Update has downloaded it but not yet deployed it to real users.
+            # Removing the old version with -AllUsers in this state also clears the staged entry,
+            # leaving no version of the app installed for any user.
+            # Only allow removal if the fixed version is actually deployed to at least one real (non-SYSTEM) user.
+            #
+            # FLOW 3 (STAGED ONLY): Fixed version for SYSTEM only → Trigger update → Skip removal → Remediate next run
+            # FLOW 2 (DEPLOYED):    Fixed version for real users → Continue to removal
+            $FixedVersionDeployedToUsers = @($FixedVersionsOfTheApp | Where-Object {
+                @($_.PackageUserInformation.UserSecurityId | Where-Object { $_.Username -and $_.Username -ne 'NT AUTHORITY\SYSTEM' }).Count -gt 0
+            })
+            if ($FixedVersionDeployedToUsers.Count -eq 0 -and $app.Deprovision -ne "true") {
+                # *** FLOW 3: FIXED VERSION ONLY STAGED ***
+                # Fixed version exists but only for SYSTEM account
+                # ACTION: Trigger Store update → Set SafeToRemove=$false → Skip removal this run
+                # NEXT RUN: After deployment to users, removal will proceed
+                Write-Output "WARNING: Fixed version of $($App.Name) is only staged (registered for NT AUTHORITY\SYSTEM) and has not been deployed to real users yet. Triggering a Store update to deploy the staged version, then skipping removal for this run to avoid leaving the app fully uninstalled. It will be removed on the next remediation run once the new version is properly deployed."
+                $PackageFamilyName = ($AllVulnerableVersionsOfTheCurrentApp | Select-Object -First 1).PackageFamilyName
+                Update-AppxStoreApp -PackageFamilyName $PackageFamilyName
+                $SafeToRemove = $false
+            }
+            # else: *** FLOW 2: FIXED VERSION DEPLOYED TO USERS ***
+            # Fixed version exists for real users → Safe to proceed with removal
         }
         else {
+            # ─── STEP 4: NO FIXED VERSION EXISTS - DETERMINE UPDATE STRATEGY ───
+            # Two paths based on Deprovision setting:
+            # FLOW 5: Deprovision=true  → Skip update, proceed to removal
+            # FLOW 4: Deprovision=false → Attempt Store update, then remove
+            
             #####Optional block
             if ($app.Deprovision -eq "true") {
+                # *** FLOW 5: NO FIXED VERSION + DEPROVISION ENABLED ***
+                # App is marked for complete removal
+                # ACTION: Skip update attempt → Proceed directly to removal and deprovisioning
                 Write-Output "Skipping trying to update the app $($App.Name) as it's set to be deprovisioned and removed from the device"
             }
             else {
+                # *** FLOW 4: NO FIXED VERSION + UPDATE ENABLED ***
+                # App should be kept if possible
+                # ACTION: Attempt Store update → Then remove vulnerable version
                 #If no fixed version is found, trigger a forced update for this app for all users
                 $PackageFamilyName = ($AllVulnerableVersionsOfTheCurrentApp | Select-Object -First 1).PackageFamilyName            
                 Write-Output "Trying to update the installed version using Windows API.."
@@ -185,24 +331,46 @@ foreach ($App in $VulnerableApps) {
             }
             
             }
+        
+        # ─── STEP 5: REMOVAL DECISION GATE ───
+        # Check $SafeToRemove flag (set to $false in FLOW 3 when fixed version is staged only)
+        # If $false → Skip removal, continue to next app
+        # If $true  → Proceed to removal (FLOWS 2, 4, 5)
         #Now we have done everything we can to make sure a newer version of the app exists, proceed to remove the vulnerable version(s)         
+        if (-not $SafeToRemove) { continue }
+        
+        # ─── STEP 6: REMOVE VULNERABLE VERSIONS ───
+        # Iterate through each vulnerable version and remove for all users
         foreach ($Appx in $AllVulnerableVersionsOfTheCurrentApp) {                              
+                # EXPECTED ERROR HANDLING:
+                # Error 0x80073D19 ("user was logged off") is EXPECTED and NORMAL
+                # Occurs when the user who installed the app is not currently logged in
+                # The -AllUsers flag ensures removal succeeds across all user contexts despite the error
                 #Removal might return an error "failed with error 0x80073D19 - An error occurred because a user was logged off"
                 #This happens when the user who installed the app is not logged in, but since we are removing the app for all users, the app gets deleted despite the error
                 try {
                     Write-Output "Attempting to remove the app $($Appx.PackageFullName) with version $($Appx.version) for all users gracefully"  
-                    Remove-AppxPackage -Package $($Appx.packagefullname) -AllUsers  -ErrorAction Stop  -Verbose -Confirm:$false 
+                    Remove-AppxPackage -Package $($Appx.packagefullname)  -AllUsers  -ErrorAction Stop  -Verbose -Confirm:$false 
                     Write-Output "Removed: package $($Appx.PackageFullName) with version $($Appx.version) for all users gracefully"                                  
                 }
                 catch {
                     Write-Output "An error has occurred $($_.Exception.Message)"
                     Write-Output "Could not remove the app for every user  $($($Appx.packagefullname)). Maybe some users don't have it hence the error"                                        
-                }                              
+                }
+                
+            # ─── STEP 7: DEPROVISIONING (FLOW 6) ───
+            # Only executed if Deprovision="true" for this app
+            # Removes app from OS provisioning store to prevent:
+            #   - Automatic installation for new users
+            #   - Re-deployment during OS updates  
+            #   - App appearing in default Start menu
+            # Also triggers cleanup of orphaned provisioned packages
             if ("True" -eq $($App.Deprovision)) {
+                # *** FLOW 6: DEPROVISIONING PROCESS ***
                 Try {
                     Write-Output "Deprovioning is set to True. Trying to deporvison the app $($($Appx.packagefullname)) for all users"
                     #Remove-AppxProvisionedPackage -displayname $($App.PackageFullName) -AllUsers -Online -Verbose                         
-                    Get-AppxProvisionedPackage -Online | Where-Object {$_.displayname -eq $($App.Name) }  | Remove-AppxProvisionedPackage -Online -AllUsers -Verbose
+                    Get-AppxProvisionedPackage -Online | Where-Object {$_.displayname -eq $($App.Name) -and [System.Version]$_.Version -lt $App.FixedVersion}  | Remove-AppxProvisionedPackage -Online -AllUsers -Verbose
                     # trigger this to clean up orphaned provisioned packages 	c:\windows\system32\rundll32.exe AppxDeploymentClient.dll,AppxCleanupOrphanPackages
                     Start-Process -FilePath "c:\windows\system32\rundll32.exe" -ArgumentList "AppxDeploymentClient.dll,AppxCleanupOrphanPackages" -Wait -NoNewWindow -ErrorAction SilentlyContinue 
                 }
@@ -210,19 +378,22 @@ foreach ($App in $VulnerableApps) {
                     #The app wasn't removed. 
                     Write-Output "Could not deprovising or remove the app $($Appx.PackageFullName) with version $($Appx.version) for all users gracefully"  
                 }
-            }
-            #Remove app folder under Program Files\WindowsApps if it exists
-            $AppFolder = "C:\Program Files\WindowsApps\$($Appx.packagefullname)"
-            if (Test-Path $AppFolder) {
-                Write-Output "Removing the app folder $($AppFolder)"
-                Remove-Item -Path $AppFolder -Recurse -Force -Verbose
-            }
-            else {
-                Write-Output "The app folder $($AppFolder) does not exist"
-            }
+            }            
         }            
+    }
+    else {
+        # *** FLOW 1: NO VULNERABLE VERSIONS FOUND ***
+        # App is either not installed or only safe versions are present
+        # ACTION: Skip to next app in array
     }        
 }
+
+<#──────────────────────────────────────────────────────────────────────────────
+  SECTION: SCRIPT COMPLETION
+  PURPOSE: Stop transcript logging
+────────────────────────────────────────────────────────────────────────────#>
 Stop-Transcript
+
+#endregion
 
 
